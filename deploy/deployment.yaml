@@ -16,7 +16,7 @@ spec:
         runAsUser: 999
       containers:
         - name: pod-mutator
-          image: mwennrich/pod-mutator:latest
+          image: ghcr.io/mwennrich/pod-mutator:latest
           ports:
           - containerPort: 8080
             protocol: TCP
