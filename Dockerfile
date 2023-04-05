@@ -7,7 +7,7 @@ COPY . /app
 WORKDIR /app
 
 RUN apk add make binutils
-RUN make general-mutator
+RUN make pod-mutator
 
 FROM alpine
 
@@ -15,4 +15,4 @@ WORKDIR /
 
 COPY --from=build /app .
 
-ENTRYPOINT ["./general-mutator"]
+ENTRYPOINT ["./pod-mutator"]

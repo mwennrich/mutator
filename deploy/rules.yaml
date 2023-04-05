@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: general-mutator-rules
+  name: pod-mutator-rules
   namespace: default
 data:
   rules.json: |

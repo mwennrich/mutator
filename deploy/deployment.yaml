@@ -1,42 +1,42 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: general-mutator
+  name: pod-mutator
   namespace: default
 spec:
   selector:
     matchLabels:
-      app: general-mutator
+      app: pod-mutator
   template:
     metadata:
       labels:
-        app: general-mutator
+        app: pod-mutator
     spec:
       securityContext:
         runAsUser: 999
       containers:
-        - name: general-mutator
-          image: mwennrich/general-mutator:latest
+        - name: pod-mutator
+          image: mwennrich/pod-mutator:latest
           ports:
           - containerPort: 8080
             protocol: TCP
           volumeMounts:
             - name: tls
-              mountPath: "/etc/general-mutator/tls/"
+              mountPath: "/etc/pod-mutator/tls/"
             - name: rules
-              mountPath: "/etc/general-mutator/rules/"
+              mountPath: "/etc/pod-mutator/rules/"
       volumes:
         - name: tls
           secret:
-            secretName: general-mutator-certs
+            secretName: pod-mutator-certs
         - name: rules
           configMap:
-            name: general-mutator-rules
+            name: pod-mutator-rules
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: general-mutator
+  name: pod-mutator
   namespace: default
 spec:
   ports:
@@ -44,4 +44,4 @@ spec:
       protocol: TCP
       targetPort: 8080
   selector:
-    app: general-mutator
+    app: pod-mutator

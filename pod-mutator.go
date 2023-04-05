@@ -47,9 +47,9 @@ func initFlags() (*config, error) {
 	cfg := &config{}
 
 	fl := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/general-mutator/tls/cert.pem", "TLS certificate file")
-	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/general-mutator/tls/key.pem", "TLS key file")
-	fl.StringVar(&cfg.rulesFile, "rules-file", "/etc/general-mutator/rules/rules.json", "rules file")
+	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/pod-mutator/tls/cert.pem", "TLS certificate file")
+	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/pod-mutator/tls/key.pem", "TLS key file")
+	fl.StringVar(&cfg.rulesFile, "rules-file", "/etc/pod-mutator/rules/rules.json", "rules file")
 	fl.IntVar(&cfg.HealthCheckNodePort, "health-check-node-port", 31397, "Health check node port")
 
 	err := fl.Parse(os.Args[1:])
@@ -198,7 +198,7 @@ func run() error {
 
 	// Create webhook.
 	mcfg := kwhmutating.WebhookConfig{
-		ID:      "general-mutator.metal-stack.dev",
+		ID:      "pod-mutator.metal-stack.dev",
 		Mutator: mt,
 		Logger:  logger,
 	}

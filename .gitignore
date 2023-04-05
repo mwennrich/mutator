@@ -1,4 +1,4 @@
 deploy/webhook-certs.yaml
 deploy/webhook-registration.yaml
-general-mutator
+pod-mutator
 .vscode/

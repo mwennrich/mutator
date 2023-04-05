@@ -1,19 +1,19 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: general-mutator
+  name: pod-mutator
 webhooks:
 - admissionReviewVersions:
   - v1beta1
   clientConfig:
     caBundle: CA_BUNDLE
     service:
-      name: general-mutator
+      name: pod-mutator
       namespace: default
       port: 443
   failurePolicy: Ignore
   matchPolicy: Exact
-  name: general-mutator.metal-stack.dev
+  name: pod-mutator.metal-stack.dev
   namespaceSelector: {}
   objectSelector: {}
   rules:
