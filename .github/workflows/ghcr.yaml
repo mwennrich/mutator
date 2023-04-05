@@ -1,5 +1,5 @@
 ---
-name: Docker Build Action
+name: GHCR Build Action
 on:
   pull_request:
     branches:
