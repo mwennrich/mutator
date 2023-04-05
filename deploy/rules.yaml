@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: general-mutator-rules
+  namespace: default
+data:
+  rules.json: |
+    {
+      "rules": [
+        {
+          "namespace": "^(default)$",
+          "name": "^(echoserver.*)$",
+          "patch": "[{\"op\": \"add\", \"path\": \"/metadata/labels/mwen\", \"value\": \"test\"}]"
+        }
+      ]
+    }
