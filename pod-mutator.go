@@ -8,9 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/signal"
 	"regexp"
-	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -72,46 +70,11 @@ func run() error {
 
 	rules := readRules(cfg, logger)
 
-	// // Initialize the inotify watcher
-	// watcher, err := unix.InotifyInit()
-	// if err != nil {
-	//     panic(err)
-	// }
-
-	// // Add the file to the watcher's list of files to watch
-	// wd, err := unix.InotifyAddWatch(watcher, cfg.rulesFile, unix.IN_MODIFY)
-	// if err != nil {
-	//     panic(err)
-	// }
-
-	// // Continuously wait for events
-	// for {
-	// 	var buf [unix.SizeofInotifyEvent * 10]byte
-	// 	n, err := unix.Read(watcher, buf[:])
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-
-	// 	// Convert the byte slice to a slice of InotifyEvent structs
-	// 	events := (*[1 << 20]unix.InotifyEvent)(unsafe.Pointer(&buf[0]))[:n/unix.SizeofInotifyEvent]
-
-	// 	for _, event := range events {
-	// 		if event.Wd == int32(wd) {
-	// 			fmt.Println("File has been modified")
-	// 			// Do something here when the file has been modified
-	// 		}
-	// 	}
-	// }
-
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		panic(err)
 	}
 	defer watcher.Close()
-
-	// Set up signal handling for graceful shutdown
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// Start watching the config file
 	err = watcher.Add(cfg.rulesFile)
@@ -157,35 +120,45 @@ func run() error {
 
 		patched := false
 		for _, rule := range rules.Rules {
-
-			namespacere := regexp.MustCompile(rule.NamespaceRe)
+			// Check if the namespace matches the rule
+			namespacere, err := regexp.Compile(rule.NamespaceRe)
+			if err != nil {
+				return nil, fmt.Errorf("bad namespace regex: %v", err)
+			}
 			if !namespacere.MatchString(pod.Namespace) {
 				continue
 			}
 
-			namere := regexp.MustCompile(rule.NameRe)
+			// Check if the name matches the rule
+			namere, err := regexp.Compile(rule.NameRe)
+			if err != nil {
+				return nil, fmt.Errorf("bad name regex: %v", err)
+			}
 			if !namere.MatchString(pod.Name) {
 				continue
 			}
 
+			// Marshal the pod to JSON
 			podJson, err := json.Marshal(pod)
 			if err != nil {
-				panic(err)
+				return nil, fmt.Errorf("failed to marshal pod: %v", err)
 			}
 
+			// Decode the JSON patch in the rule
 			patch, err := jsonpatch.DecodePatch([]byte(rule.Patch))
 			if err != nil {
-				panic(err)
+				return nil, fmt.Errorf("failed to decode patch: %v", err)
 			}
 
+			// Apply the patch to the pod
 			patchedJson, err := patch.Apply(podJson)
 			if err != nil {
-				panic(err)
+				return nil, fmt.Errorf("failed to apply patch: %v", err)
 			}
 
-			logger.Infof("patched pod: %s\n", string(patchedJson))
+			// Unmarshal the patched pod back into a struct
 			if err := json.Unmarshal(patchedJson, &patchedPod); err != nil {
-				panic(err)
+				return nil, fmt.Errorf("failed to unmarshal pod: %v", err)
 			}
 			patched = true
 		}
@@ -195,7 +168,6 @@ func run() error {
 		var metaObj metav1.Object = &patchedPod
 		return &kwhmutating.MutatorResult{MutatedObject: metaObj}, nil
 	})
-
 	// Create webhook.
 	mcfg := kwhmutating.WebhookConfig{
 		ID:      "pod-mutator.metal-stack.dev",
@@ -236,15 +208,18 @@ func readRules(cfg *config, logger log.Logger) Rules {
 
 	_, err := os.Stat(cfg.rulesFile)
 	if !os.IsNotExist(err) {
+		// if the file exists, open it
 		f, err := os.Open(cfg.rulesFile)
 		if err != nil {
 			logger.Errorf("error opening file %s: %w", cfg.rulesFile, err)
 		}
+		// read the file contents into a byte array
 		j, _ := io.ReadAll(f)
 		f.Close()
 		if err != nil {
 			logger.Errorf("error closing file %s: %w", cfg.rulesFile, err)
 		}
+		// unmarshal the json into the Rules struct
 		if err := json.Unmarshal(j, &rules); err != nil {
 			logger.Errorf("error unmarshling rules %w", err)
 		}
@@ -252,12 +227,11 @@ func readRules(cfg *config, logger log.Logger) Rules {
 		logger.Infof("file %s does not exist", cfg.rulesFile)
 	}
 
-	// debug
 	rls, err := json.Marshal(rules)
 	if err != nil {
-		panic(err)
+		logger.Errorf("error marshling rules %w", err)
 	}
-	logger.Infof("rules: %s\n", string(rls))
+	logger.Infof("new rules: %s\n", string(rls))
 
 	return rules
 }
