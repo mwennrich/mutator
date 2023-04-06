@@ -90,14 +90,8 @@ func run() error {
 					return
 				}
 				if event.Op == fsnotify.Remove {
-					err = watcher.Remove(event.Name)
-					if err != nil {
-						panic(err)
-					}
-					err = watcher.Add(cfg.rulesFile)
-					if err != nil {
-						panic(err)
-					}
+					watcher.Remove(event.Name)
+					watcher.Add(cfg.rulesFile)
 
 					rules = readRules(cfg, logger)
 				}
