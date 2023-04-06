@@ -90,8 +90,15 @@ func run() error {
 					return
 				}
 				if event.Op == fsnotify.Remove {
-					watcher.Remove(event.Name)
-					watcher.Add(cfg.rulesFile)
+					err = watcher.Remove(event.Name)
+					if err != nil {
+						logger.Errorf("failed to remove file from watcher: %w", err)
+					}
+
+					err = watcher.Add(cfg.rulesFile)
+					if err != nil {
+						logger.Errorf("failed to add file to watcher: %w", err)
+					}
 
 					rules = readRules(cfg, logger)
 				}
