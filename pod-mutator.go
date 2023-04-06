@@ -123,7 +123,7 @@ func run() error {
 			// Check if the namespace matches the rule
 			namespacere, err := regexp.Compile(rule.NamespaceRe)
 			if err != nil {
-				return nil, fmt.Errorf("bad namespace regex: %v", err)
+				return nil, fmt.Errorf("bad namespace regex: %w", err)
 			}
 			if !namespacere.MatchString(pod.Namespace) {
 				continue
@@ -132,7 +132,7 @@ func run() error {
 			// Check if the name matches the rule
 			namere, err := regexp.Compile(rule.NameRe)
 			if err != nil {
-				return nil, fmt.Errorf("bad name regex: %v", err)
+				return nil, fmt.Errorf("bad name regex: %w", err)
 			}
 			if !namere.MatchString(pod.Name) {
 				continue
@@ -141,24 +141,24 @@ func run() error {
 			// Marshal the pod to JSON
 			podJson, err := json.Marshal(pod)
 			if err != nil {
-				return nil, fmt.Errorf("failed to marshal pod: %v", err)
+				return nil, fmt.Errorf("failed to marshal pod: %w", err)
 			}
 
 			// Decode the JSON patch in the rule
 			patch, err := jsonpatch.DecodePatch([]byte(rule.Patch))
 			if err != nil {
-				return nil, fmt.Errorf("failed to decode patch: %v", err)
+				return nil, fmt.Errorf("failed to decode patch: %w", err)
 			}
 
 			// Apply the patch to the pod
 			patchedJson, err := patch.Apply(podJson)
 			if err != nil {
-				return nil, fmt.Errorf("failed to apply patch: %v", err)
+				return nil, fmt.Errorf("failed to apply patch: %w", err)
 			}
 
 			// Unmarshal the patched pod back into a struct
 			if err := json.Unmarshal(patchedJson, &patchedPod); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal pod: %v", err)
+				return nil, fmt.Errorf("failed to unmarshal pod: %w", err)
 			}
 			patched = true
 		}
