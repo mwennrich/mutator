@@ -1,1 +1,1 @@
-subjectAltName=DNS:pod-mutator.default.svc
+subjectAltName=DNS:mutator.default.svc

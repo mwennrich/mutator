@@ -2,12 +2,12 @@
 
 # Create certs for our webhook
 openssl genrsa -out webhookCA.key 2048
-openssl req -new -key webhookCA.key -subj "/CN=pod-mutator.default.svc"  -out webhookCA.csr
+openssl req -new -key webhookCA.key -subj "/CN=mutator.default.svc"  -out webhookCA.csr
 openssl x509 -req -days 3650 -in webhookCA.csr -signkey webhookCA.key -out webhook.crt -extfile csr.ext
 
 # Create certs secrets for k8s
 kubectl create secret generic \
-    pod-mutator-certs \
+    mutator-certs \
     --from-file=key.pem=webhookCA.key \
     --from-file=cert.pem=webhook.crt \
     --dry-run=client -o yaml > webhook-certs.yaml

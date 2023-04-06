@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	corev1 "k8s.io/api/core/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	jsonpatch "github.com/evanphx/json-patch"
@@ -45,9 +45,9 @@ func initFlags() (*config, error) {
 	cfg := &config{}
 
 	fl := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/pod-mutator/tls/cert.pem", "TLS certificate file")
-	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/pod-mutator/tls/key.pem", "TLS key file")
-	fl.StringVar(&cfg.rulesFile, "rules-file", "/etc/pod-mutator/rules/rules.json", "rules file")
+	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/mutator/tls/cert.pem", "TLS certificate file")
+	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/mutator/tls/key.pem", "TLS key file")
+	fl.StringVar(&cfg.rulesFile, "rules-file", "/etc/mutator/rules/rules.json", "rules file")
 	fl.IntVar(&cfg.HealthCheckNodePort, "health-check-node-port", 31397, "Health check node port")
 
 	err := fl.Parse(os.Args[1:])
@@ -113,65 +113,20 @@ func run() error {
 
 	// Create mutator.
 	mt := kwhmutating.MutatorFunc(func(_ context.Context, _ *kwhmodel.AdmissionReview, obj metav1.Object) (*kwhmutating.MutatorResult, error) {
-		pod, ok := obj.(*corev1.Pod)
-		if !ok {
-			return &kwhmutating.MutatorResult{}, nil
+
+		var metaObj metav1.Object
+		switch orig := obj.(type) {
+		case *appsv1.Deployment:
+			metaObj, err = handleDeployment(orig, rules)
+		case *appsv1.StatefulSet:
+			metaObj, err = handleStatefulSet(orig, rules)
 		}
-		var patchedPod corev1.Pod
-
-		patched := false
-		for _, rule := range rules.Rules {
-			// Check if the namespace matches the rule
-			namespacere, err := regexp.Compile(rule.NamespaceRe)
-			if err != nil {
-				return nil, fmt.Errorf("bad namespace regex: %w", err)
-			}
-			if !namespacere.MatchString(pod.Namespace) {
-				continue
-			}
-
-			// Check if the name matches the rule
-			namere, err := regexp.Compile(rule.NameRe)
-			if err != nil {
-				return nil, fmt.Errorf("bad name regex: %w", err)
-			}
-			if !namere.MatchString(pod.Name) {
-				continue
-			}
-
-			// Marshal the pod to JSON
-			podJson, err := json.Marshal(pod)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal pod: %w", err)
-			}
-
-			// Decode the JSON patch in the rule
-			patch, err := jsonpatch.DecodePatch([]byte(rule.Patch))
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode patch: %w", err)
-			}
-
-			// Apply the patch to the pod
-			patchedJson, err := patch.Apply(podJson)
-			if err != nil {
-				return nil, fmt.Errorf("failed to apply patch: %w", err)
-			}
-
-			// Unmarshal the patched pod back into a struct
-			if err := json.Unmarshal(patchedJson, &patchedPod); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal pod: %w", err)
-			}
-			patched = true
-		}
-		if !patched {
-			return &kwhmutating.MutatorResult{}, nil
-		}
-		var metaObj metav1.Object = &patchedPod
-		return &kwhmutating.MutatorResult{MutatedObject: metaObj}, nil
+		return &kwhmutating.MutatorResult{MutatedObject: metaObj}, err
 	})
+
 	// Create webhook.
 	mcfg := kwhmutating.WebhookConfig{
-		ID:      "pod-mutator.metal-stack.dev",
+		ID:      "mutator.metal-stack.dev",
 		Mutator: mt,
 		Logger:  logger,
 	}
@@ -202,6 +157,40 @@ func run() error {
 	}
 
 	return nil
+}
+
+func applyRules(name string, namespace string, origJson []byte, rules Rules) ([]byte, bool, error) {
+	for _, rule := range rules.Rules {
+
+		namespacere, err := regexp.Compile(rule.NamespaceRe)
+		if err != nil {
+			return nil, false, fmt.Errorf("bad namespace regex: %w", err)
+		}
+		if !namespacere.MatchString(namespace) {
+			continue
+		}
+
+		namere, err := regexp.Compile(rule.NameRe)
+		if err != nil {
+			return nil, false, fmt.Errorf("bad name regex: %w", err)
+		}
+		if !namere.MatchString(name) {
+			continue
+		}
+
+		patch, err := jsonpatch.DecodePatch([]byte(rule.Patch))
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to decode patch: %w", err)
+		}
+
+		patchedJson, err := patch.Apply(origJson)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to apply patch: %w", err)
+		}
+
+		return patchedJson, true, nil
+	}
+	return nil, false, nil
 }
 
 func readRules(cfg *config, logger log.Logger) Rules {
@@ -235,6 +224,54 @@ func readRules(cfg *config, logger log.Logger) Rules {
 	logger.Infof("new rules: %s\n", string(rls))
 
 	return rules
+}
+
+func handleDeployment(orig *appsv1.Deployment, rules Rules) (metav1.Object, error) {
+
+	var patchedObj appsv1.Deployment
+
+	origJson, err := json.Marshal(orig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal pod: %w", err)
+	}
+
+	patchedJson, ok, err := applyRules(orig.Name, orig.Namespace, origJson, rules)
+	if err != nil {
+		return nil, fmt.Errorf("failed to patch pod: %w", err)
+	}
+	if !ok {
+		return nil, nil
+	}
+	if err := json.Unmarshal(patchedJson, &patchedObj); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pod: %w", err)
+	}
+	var metaObj metav1.Object = &patchedObj
+	return metaObj, nil
+}
+
+func handleStatefulSet(orig *appsv1.StatefulSet, rules Rules) (metav1.Object, error) {
+
+	var patchedObj appsv1.StatefulSet
+
+	// Marshal the pod to JSON
+	origJson, err := json.Marshal(orig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal pod: %w", err)
+	}
+
+	patchedJson, ok, err := applyRules(orig.Name, orig.Namespace, origJson, rules)
+	if err != nil {
+		return nil, fmt.Errorf("failed to patch pod: %w", err)
+	}
+	if !ok {
+		return nil, nil
+	}
+	if err := json.Unmarshal(patchedJson, &patchedObj); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pod: %w", err)
+	}
+
+	var metaObj metav1.Object = &patchedObj
+	return metaObj, nil
 }
 
 func main() {

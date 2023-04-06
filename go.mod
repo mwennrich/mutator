@@ -3,18 +3,15 @@ module mutator.go
 go 1.20
 
 require (
-	golang.org/x/net v0.8.0 // indirect
-	golang.org/x/text v0.8.0 // indirect
-	k8s.io/klog/v2 v2.90.1 // indirect
-)
-
-require (
 	github.com/evanphx/json-patch v5.6.0+incompatible
 	github.com/fsnotify/fsnotify v1.6.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/slok/kubewebhook/v2 v2.5.0
+	golang.org/x/net v0.8.0 // indirect
+	golang.org/x/text v0.8.0 // indirect
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3
+	k8s.io/klog/v2 v2.90.1 // indirect
 )
 
 require (
