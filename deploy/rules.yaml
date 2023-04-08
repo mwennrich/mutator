@@ -10,7 +10,7 @@ data:
         {
           "namespace": "^(default)$",
           "name": "^(echoserver.*)$",
-          "patch": "[{\"op\": \"add\", \"path\": \"/metadata/labels/mwen\", \"value\": \"test\"}]"
+          "patch": "[{\"op\": \"add\", \"path\": \"/spec/template/metadata/labels/mwen\", \"value\": \"test\"}]"
         },
         {
           "namespace": "^(kube-system)$",
