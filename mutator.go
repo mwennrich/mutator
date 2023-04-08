@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"reflect"
 	"regexp"
 	"time"
 
@@ -224,9 +223,6 @@ func handleObject(obj metav1.Object, rules Rules) (metav1.Object, error) {
 		return nil, fmt.Errorf("failed to marshal object: %w", err)
 	}
 
-	// Get the type of the object
-	objType := reflect.TypeOf(obj).Elem()
-
 	// Patch the object based on the type
 	patchedJSON, ok, err := applyRules(obj.GetName(), obj.GetNamespace(), origJSON, rules)
 	if err != nil {
@@ -236,15 +232,12 @@ func handleObject(obj metav1.Object, rules Rules) (metav1.Object, error) {
 		return nil, nil
 	}
 
-	// Create a new object of the same type as the original
-	patchedObj := reflect.New(objType).Interface().(metav1.Object)
-
 	// Unmarshal the patched object
-	if err := json.Unmarshal(patchedJSON, patchedObj); err != nil {
+	if err := json.Unmarshal(patchedJSON, obj); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal object: %w", err)
 	}
 
-	return patchedObj, nil
+	return obj, nil
 }
 
 
