@@ -1,17 +1,17 @@
 GO111MODULE := on
 DOCKER_TAG := $(or ${GIT_TAG_NAME}, latest)
 
-all: pod-mutator
+all: mutator
 
-.PHONY: pod-mutator
-pod-mutator:
-	go build pod-mutator.go
-	strip pod-mutator
+.PHONY: mutator
+mutator:
+	go build mutator.go
+	strip mutator
 
 .PHONY: dockerimages
-dockerimages: pod-mutator
-	docker build -t mwennrich/pod-mutator:${DOCKER_TAG} .
+dockerimages:
+	docker build -t mwennrich/mutator:${DOCKER_TAG} .
 
 .PHONY: dockerpush
-dockerpush: pod-mutator
-	docker push mwennrich/pod-mutator:${DOCKER_TAG}
+dockerpush:
+	docker push mwennrich/mutator:${DOCKER_TAG}

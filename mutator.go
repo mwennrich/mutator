@@ -8,13 +8,12 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/signal"
+	"reflect"
 	"regexp"
-	"syscall"
+	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	jsonpatch "github.com/evanphx/json-patch"
@@ -36,6 +35,7 @@ type config struct {
 type Rule struct {
 	NamespaceRe string `json:"namespace"`
 	NameRe      string `json:"name"`
+	KindRe      string `json:"kind"`
 	Patch       string `json:"patch"`
 }
 
@@ -47,9 +47,9 @@ func initFlags() (*config, error) {
 	cfg := &config{}
 
 	fl := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/pod-mutator/tls/cert.pem", "TLS certificate file")
-	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/pod-mutator/tls/key.pem", "TLS key file")
-	fl.StringVar(&cfg.rulesFile, "rules-file", "/etc/pod-mutator/rules/rules.json", "rules file")
+	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/mutator/tls/cert.pem", "TLS certificate file")
+	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/mutator/tls/key.pem", "TLS key file")
+	fl.StringVar(&cfg.rulesFile, "rules-file", "/etc/mutator/rules/rules.json", "rules file")
 	fl.IntVar(&cfg.HealthCheckNodePort, "health-check-node-port", 31397, "Health check node port")
 
 	err := fl.Parse(os.Args[1:])
@@ -72,46 +72,11 @@ func run() error {
 
 	rules := readRules(cfg, logger)
 
-	// // Initialize the inotify watcher
-	// watcher, err := unix.InotifyInit()
-	// if err != nil {
-	//     panic(err)
-	// }
-
-	// // Add the file to the watcher's list of files to watch
-	// wd, err := unix.InotifyAddWatch(watcher, cfg.rulesFile, unix.IN_MODIFY)
-	// if err != nil {
-	//     panic(err)
-	// }
-
-	// // Continuously wait for events
-	// for {
-	// 	var buf [unix.SizeofInotifyEvent * 10]byte
-	// 	n, err := unix.Read(watcher, buf[:])
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-
-	// 	// Convert the byte slice to a slice of InotifyEvent structs
-	// 	events := (*[1 << 20]unix.InotifyEvent)(unsafe.Pointer(&buf[0]))[:n/unix.SizeofInotifyEvent]
-
-	// 	for _, event := range events {
-	// 		if event.Wd == int32(wd) {
-	// 			fmt.Println("File has been modified")
-	// 			// Do something here when the file has been modified
-	// 		}
-	// 	}
-	// }
-
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		panic(err)
 	}
 	defer watcher.Close()
-
-	// Set up signal handling for graceful shutdown
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// Start watching the config file
 	err = watcher.Add(cfg.rulesFile)
@@ -127,13 +92,10 @@ func run() error {
 					return
 				}
 				if event.Op == fsnotify.Remove {
-					err = watcher.Remove(event.Name)
-					if err != nil {
-						panic(err)
-					}
+
 					err = watcher.Add(cfg.rulesFile)
 					if err != nil {
-						panic(err)
+						logger.Errorf("failed to add file to watcher: %w", err)
 					}
 
 					rules = readRules(cfg, logger)
@@ -149,56 +111,13 @@ func run() error {
 
 	// Create mutator.
 	mt := kwhmutating.MutatorFunc(func(_ context.Context, _ *kwhmodel.AdmissionReview, obj metav1.Object) (*kwhmutating.MutatorResult, error) {
-		pod, ok := obj.(*corev1.Pod)
-		if !ok {
-			return &kwhmutating.MutatorResult{}, nil
-		}
-		var patchedPod corev1.Pod
-
-		patched := false
-		for _, rule := range rules.Rules {
-
-			namespacere := regexp.MustCompile(rule.NamespaceRe)
-			if !namespacere.MatchString(pod.Namespace) {
-				continue
-			}
-
-			namere := regexp.MustCompile(rule.NameRe)
-			if !namere.MatchString(pod.Name) {
-				continue
-			}
-
-			podJson, err := json.Marshal(pod)
-			if err != nil {
-				panic(err)
-			}
-
-			patch, err := jsonpatch.DecodePatch([]byte(rule.Patch))
-			if err != nil {
-				panic(err)
-			}
-
-			patchedJson, err := patch.Apply(podJson)
-			if err != nil {
-				panic(err)
-			}
-
-			logger.Infof("patched pod: %s\n", string(patchedJson))
-			if err := json.Unmarshal(patchedJson, &patchedPod); err != nil {
-				panic(err)
-			}
-			patched = true
-		}
-		if !patched {
-			return &kwhmutating.MutatorResult{}, nil
-		}
-		var metaObj metav1.Object = &patchedPod
-		return &kwhmutating.MutatorResult{MutatedObject: metaObj}, nil
+		metaObj, err := handleObject(obj, rules)
+		return &kwhmutating.MutatorResult{MutatedObject: metaObj}, err
 	})
 
 	// Create webhook.
 	mcfg := kwhmutating.WebhookConfig{
-		ID:      "pod-mutator.metal-stack.dev",
+		ID:      "mutator.metal-stack.dev",
 		Mutator: mt,
 		Logger:  logger,
 	}
@@ -231,20 +150,67 @@ func run() error {
 	return nil
 }
 
+func applyRules(name string, namespace string, kind string, origJson []byte, rules Rules) ([]byte, bool, error) {
+	for _, rule := range rules.Rules {
+		// Check if the rule applies to the namespace
+		namespacere, err := regexp.Compile(rule.NamespaceRe)
+		if err != nil {
+			return nil, false, fmt.Errorf("bad namespace regex: %w", err)
+		}
+		if !namespacere.MatchString(namespace) {
+			continue
+		}
+
+		// Check if the rule applies to the name
+		namere, err := regexp.Compile(rule.NameRe)
+		if err != nil {
+			return nil, false, fmt.Errorf("bad name regex: %w", err)
+		}
+		if !namere.MatchString(name) {
+			continue
+		}
+
+		kindre, err := regexp.Compile(rule.KindRe)
+		if err != nil {
+			return nil, false, fmt.Errorf("bad kind regex: %w", err)
+		}
+		if !kindre.MatchString(kind) {
+			continue
+		}
+
+		// Apply the patch
+		patch, err := jsonpatch.DecodePatch([]byte(rule.Patch))
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to decode patch: %w", err)
+		}
+
+		patchedJson, err := patch.Apply(origJson)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to apply patch: %w", err)
+		}
+
+		return patchedJson, true, nil
+	}
+	return origJson, false, nil
+}
+
 func readRules(cfg *config, logger log.Logger) Rules {
 	var rules Rules
 
 	_, err := os.Stat(cfg.rulesFile)
 	if !os.IsNotExist(err) {
+		// if the file exists, open it
 		f, err := os.Open(cfg.rulesFile)
 		if err != nil {
 			logger.Errorf("error opening file %s: %w", cfg.rulesFile, err)
 		}
+		// read the file contents into a byte array
 		j, _ := io.ReadAll(f)
 		f.Close()
 		if err != nil {
 			logger.Errorf("error closing file %s: %w", cfg.rulesFile, err)
 		}
+		// unmarshal the json into the Rules struct
 		if err := json.Unmarshal(j, &rules); err != nil {
 			logger.Errorf("error unmarshling rules %w", err)
 		}
@@ -252,14 +218,40 @@ func readRules(cfg *config, logger log.Logger) Rules {
 		logger.Infof("file %s does not exist", cfg.rulesFile)
 	}
 
-	// debug
 	rls, err := json.Marshal(rules)
 	if err != nil {
-		panic(err)
+		logger.Errorf("error marshling rules %w", err)
 	}
-	logger.Infof("rules: %s\n", string(rls))
+	logger.Infof("new rules: %s\n", string(rls))
 
 	return rules
+}
+
+func handleObject(obj metav1.Object, rules Rules) (metav1.Object, error) {
+	// Marshal the object to JSON
+	origJSON, err := json.Marshal(obj)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal object: %w", err)
+	}
+
+	parts := strings.Split(reflect.TypeOf(obj).String(), ".")
+	kind := parts[len(parts)-1]
+
+	// Patch the object based on the type
+	patchedJSON, ok, err := applyRules(obj.GetName(), obj.GetNamespace(), kind, origJSON, rules)
+	if err != nil {
+		return nil, fmt.Errorf("failed to patch object: %w", err)
+	}
+	if !ok {
+		return nil, nil
+	}
+
+	// Unmarshal the patched object
+	if err := json.Unmarshal(patchedJSON, obj); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal object: %w", err)
+	}
+
+	return obj, nil
 }
 
 func main() {
