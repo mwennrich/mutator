@@ -9,12 +9,14 @@ data:
       "rules": [
         {
           "namespace": "^(default)$",
-          "name": "^(echoserver.*)$",
-          "patch": "[{\"op\": \"add\", \"path\": \"/spec/template/metadata/labels/mwen\", \"value\": \"test\"}]"
+          "name": "^(echoserver)$",
+          "kind": "^(StatefulSet)$",
+          "patch": "[{\"op\": \"add\", \"path\": \"/spec/template/metadata/labels/mwen\", \"value\": \"test2\"}]"
         },
         {
           "namespace": "^(kube-system)$",
-          "name": "^(coredns.*)$",
+          "name": "^(coredns)$",
+          "kind": "^(Deployment)$",
           "patch": "[{\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/image\", \"value\": \"coredns/coredns:1.10.1\"}]"
         }
       ]

@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -33,6 +35,7 @@ type config struct {
 type Rule struct {
 	NamespaceRe string `json:"namespace"`
 	NameRe      string `json:"name"`
+	KindRe      string `json:"kind"`
 	Patch       string `json:"patch"`
 }
 
@@ -147,7 +150,7 @@ func run() error {
 	return nil
 }
 
-func applyRules(name string, namespace string, origJson []byte, rules Rules) ([]byte, bool, error) {
+func applyRules(name string, namespace string, kind string, origJson []byte, rules Rules) ([]byte, bool, error) {
 	for _, rule := range rules.Rules {
 		// Check if the rule applies to the namespace
 		namespacere, err := regexp.Compile(rule.NamespaceRe)
@@ -164,6 +167,14 @@ func applyRules(name string, namespace string, origJson []byte, rules Rules) ([]
 			return nil, false, fmt.Errorf("bad name regex: %w", err)
 		}
 		if !namere.MatchString(name) {
+			continue
+		}
+
+		kindre, err := regexp.Compile(rule.KindRe)
+		if err != nil {
+			return nil, false, fmt.Errorf("bad kind regex: %w", err)
+		}
+		if !kindre.MatchString(kind) {
 			continue
 		}
 
@@ -223,8 +234,11 @@ func handleObject(obj metav1.Object, rules Rules) (metav1.Object, error) {
 		return nil, fmt.Errorf("failed to marshal object: %w", err)
 	}
 
+	parts := strings.Split(reflect.TypeOf(obj).String(), ".")
+	kind := parts[len(parts)-1]
+
 	// Patch the object based on the type
-	patchedJSON, ok, err := applyRules(obj.GetName(), obj.GetNamespace(), origJSON, rules)
+	patchedJSON, ok, err := applyRules(obj.GetName(), obj.GetNamespace(), kind, origJSON, rules)
 	if err != nil {
 		return nil, fmt.Errorf("failed to patch object: %w", err)
 	}
@@ -239,7 +253,6 @@ func handleObject(obj metav1.Object, rules Rules) (metav1.Object, error) {
 
 	return obj, nil
 }
-
 
 func main() {
 	err := run()
