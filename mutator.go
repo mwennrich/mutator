@@ -62,7 +62,7 @@ func initFlags() (*config, error) {
 
 func run() error {
 	logrusLogEntry := logrus.NewEntry(logrus.New())
-	logrusLogEntry.Logger.SetLevel(logrus.DebugLevel)
+	logrusLogEntry.Logger.SetLevel(logrus.ErrorLevel)
 	logger := kwhlogrus.NewLogrus(logrusLogEntry)
 
 	cfg, err := initFlags()
