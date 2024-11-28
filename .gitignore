@@ -1,4 +1,5 @@
 deploy/webhook-certs.yaml
 deploy/webhook-registration.yaml
+deploy-kube-system
 mutator
 .vscode/
