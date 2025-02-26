@@ -9,7 +9,7 @@ WORKDIR /app
 RUN apk add make binutils
 RUN make mutator
 
-FROM alpine
+FROM scratch
 
 WORKDIR /
 
