@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS build
+FROM golang:1.24-alpine AS build
 ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 
@@ -9,10 +9,10 @@ WORKDIR /app
 RUN apk add make binutils
 RUN make mutator
 
-FROM alpine
+FROM scratch
 
 WORKDIR /
 
-COPY --from=build /app .
+COPY --from=build /app/mutator .
 
 ENTRYPOINT ["./mutator"]
