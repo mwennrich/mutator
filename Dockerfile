@@ -13,6 +13,6 @@ FROM scratch
 
 WORKDIR /
 
-COPY --from=build /app .
+COPY --from=build /app/mutator .
 
 ENTRYPOINT ["./mutator"]
