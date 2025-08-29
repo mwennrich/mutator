@@ -79,7 +79,7 @@ func run() error {
 	defer func() {
 		err := watcher.Close()
 		if err != nil {
-			logger.Errorf("error closing watcher: %w", err)
+			logger.Errorf("error closing watcher: %v", err)
 		}
 	}()
 
@@ -100,7 +100,7 @@ func run() error {
 
 					err = watcher.Add(cfg.rulesFile)
 					if err != nil {
-						logger.Errorf("failed to add file to watcher: %w", err)
+						logger.Errorf("failed to add file to watcher: %v", err)
 					}
 
 					rules = readRules(cfg, logger)
@@ -207,20 +207,20 @@ func readRules(cfg *config, logger log.Logger) Rules {
 		// if the file exists, open it
 		f, err := os.Open(cfg.rulesFile)
 		if err != nil {
-			logger.Errorf("error opening file %s: %w", cfg.rulesFile, err)
+			logger.Errorf("error opening file %s: %v", cfg.rulesFile, err)
 		}
 		// read the file contents into a byte array
 		j, err := io.ReadAll(f)
 		if err != nil {
-			logger.Errorf("error reading file %s: %w", cfg.rulesFile, err)
+			logger.Errorf("error reading file %s: %v", cfg.rulesFile, err)
 		}
 		err = f.Close()
 		if err != nil {
-			logger.Errorf("error closing file %s: %w", cfg.rulesFile, err)
+			logger.Errorf("error closing file %s: %v", cfg.rulesFile, err)
 		}
 		// unmarshal the json into the Rules struct
 		if err := json.Unmarshal(j, &rules); err != nil {
-			logger.Errorf("error unmarshling rules %w", err)
+			logger.Errorf("error unmarshling rules %v", err)
 		}
 	} else {
 		logger.Infof("file %s does not exist", cfg.rulesFile)
@@ -228,7 +228,7 @@ func readRules(cfg *config, logger log.Logger) Rules {
 
 	rls, err := json.Marshal(rules)
 	if err != nil {
-		logger.Errorf("error marshling rules %w", err)
+		logger.Errorf("error marshling rules %v", err)
 	}
 	logger.Infof("new rules: %s\n", string(rls))
 
