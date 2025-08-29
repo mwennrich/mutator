@@ -210,7 +210,10 @@ func readRules(cfg *config, logger log.Logger) Rules {
 			logger.Errorf("error opening file %s: %w", cfg.rulesFile, err)
 		}
 		// read the file contents into a byte array
-		j, _ := io.ReadAll(f)
+		j, err := io.ReadAll(f)
+		if err != nil {
+			logger.Errorf("error reading file %s: %w", cfg.rulesFile, err)
+		}
 		err = f.Close()
 		if err != nil {
 			logger.Errorf("error closing file %s: %w", cfg.rulesFile, err)
