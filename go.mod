@@ -1,6 +1,6 @@
 module mutator.go
 
-go 1.24
+go 1.25
 
 require (
 	github.com/evanphx/json-patch v5.9.11+incompatible
