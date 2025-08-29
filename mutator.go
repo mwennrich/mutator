@@ -76,7 +76,12 @@ func run() error {
 	if err != nil {
 		panic(err)
 	}
-	defer watcher.Close()
+	defer func() {
+		err := watcher.Close()
+		if err != nil {
+			logger.Errorf("error closing watcher: %w", err)
+		}
+	}()
 
 	// Start watching the config file
 	err = watcher.Add(cfg.rulesFile)
@@ -206,7 +211,7 @@ func readRules(cfg *config, logger log.Logger) Rules {
 		}
 		// read the file contents into a byte array
 		j, _ := io.ReadAll(f)
-		f.Close()
+		err = f.Close()
 		if err != nil {
 			logger.Errorf("error closing file %s: %w", cfg.rulesFile, err)
 		}
