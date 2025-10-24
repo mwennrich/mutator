@@ -34,3 +34,14 @@ data:
       ]
     }
 ```
+
+## Configuration
+
+### Log Level
+
+The log level can be configured using the `LOG_LEVEL` environment variable.
+
+**Default:** `error` (only errors are logged)
+
+**Available levels:** `panic`, `fatal`, `error`, `warn`, `info`, `debug`, `trace`
+
