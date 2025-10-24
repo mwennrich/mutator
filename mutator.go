@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -68,6 +69,10 @@ func run() error {
 	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
 		if level, err := logrus.ParseLevel(envLogLevel); err == nil {
 			logLevel = level
+		} else {
+			// Log warning for invalid log level, but continue with default
+			logrusLogEntry.Logger.SetLevel(logrus.WarnLevel)
+			logrusLogEntry.Warnf("Invalid LOG_LEVEL '%s': %v. Using default 'error' level.", envLogLevel, err)
 		}
 	}
 	logrusLogEntry.Logger.SetLevel(logLevel)
@@ -204,7 +209,7 @@ func applyRules(name string, namespace string, kind string, origJson []byte, rul
 		}
 
 		// Log if the object was actually mutated
-		if !reflect.DeepEqual(origJson, patchedJson) {
+		if !bytes.Equal(origJson, patchedJson) {
 			logger.Infof("Object mutated: %s/%s (kind: %s) - rule applied", namespace, name, kind)
 		}
 
