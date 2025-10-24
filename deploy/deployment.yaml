@@ -17,6 +17,9 @@ spec:
       containers:
         - name: mutator
           image: ghcr.io/mwennrich/mutator:latest
+          env:
+            - name: LOG_LEVEL
+              value: "info"
           ports:
           - containerPort: 8080
             protocol: TCP
