@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -62,7 +63,20 @@ func initFlags() (*config, error) {
 
 func run() error {
 	logrusLogEntry := logrus.NewEntry(logrus.New())
-	logrusLogEntry.Logger.SetLevel(logrus.ErrorLevel)
+
+	// Set log level from environment variable, default to ErrorLevel
+	logLevel := logrus.ErrorLevel
+	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
+		if level, err := logrus.ParseLevel(envLogLevel); err == nil {
+			logLevel = level
+		} else {
+			// Log warning for invalid log level, but continue with default
+			logrusLogEntry.Logger.SetLevel(logrus.WarnLevel)
+			logrusLogEntry.Warnf("Invalid LOG_LEVEL '%s': %v. Using default 'error' level.", envLogLevel, err)
+		}
+	}
+	logrusLogEntry.Logger.SetLevel(logLevel)
+
 	logger := kwhlogrus.NewLogrus(logrusLogEntry)
 
 	cfg, err := initFlags()
@@ -116,7 +130,7 @@ func run() error {
 
 	// Create mutator.
 	mt := kwhmutating.MutatorFunc(func(_ context.Context, _ *kwhmodel.AdmissionReview, obj metav1.Object) (*kwhmutating.MutatorResult, error) {
-		metaObj, err := handleObject(obj, rules)
+		metaObj, err := handleObject(obj, rules, logger)
 		return &kwhmutating.MutatorResult{MutatedObject: metaObj}, err
 	})
 
@@ -155,7 +169,7 @@ func run() error {
 	return nil
 }
 
-func applyRules(name string, namespace string, kind string, origJson []byte, rules Rules) ([]byte, bool, error) {
+func applyRules(name string, namespace string, kind string, origJson []byte, rules Rules, logger log.Logger) ([]byte, bool, error) {
 	for _, rule := range rules.Rules {
 		// Check if the rule applies to the namespace
 		namespacere, err := regexp.Compile(rule.NamespaceRe)
@@ -192,6 +206,11 @@ func applyRules(name string, namespace string, kind string, origJson []byte, rul
 		patchedJson, err := patch.Apply(origJson)
 		if err != nil {
 			return nil, false, fmt.Errorf("failed to apply patch: %w", err)
+		}
+
+		// Log if the object was actually mutated
+		if !bytes.Equal(origJson, patchedJson) {
+			logger.Infof("Object mutated: %s/%s (kind: %s) - rule applied", namespace, name, kind)
 		}
 
 		return patchedJson, true, nil
@@ -235,7 +254,7 @@ func readRules(cfg *config, logger log.Logger) Rules {
 	return rules
 }
 
-func handleObject(obj metav1.Object, rules Rules) (metav1.Object, error) {
+func handleObject(obj metav1.Object, rules Rules, logger log.Logger) (metav1.Object, error) {
 	// Marshal the object to JSON
 	origJSON, err := json.Marshal(obj)
 	if err != nil {
@@ -246,7 +265,7 @@ func handleObject(obj metav1.Object, rules Rules) (metav1.Object, error) {
 	kind := parts[len(parts)-1]
 
 	// Patch the object based on the type
-	patchedJSON, ok, err := applyRules(obj.GetName(), obj.GetNamespace(), kind, origJSON, rules)
+	patchedJSON, ok, err := applyRules(obj.GetName(), obj.GetNamespace(), kind, origJSON, rules, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to patch object: %w", err)
 	}
