@@ -177,6 +177,7 @@ func applyRules(name string, namespace string, kind string, origJson []byte, rul
 			return nil, false, fmt.Errorf("bad namespace regex: %w", err)
 		}
 		if !namespacere.MatchString(namespace) {
+			logger.Debugf("Object does not match namespace regex %q: %s/%s (kind: %s)", rule.NamespaceRe, namespace, name, kind)
 			continue
 		}
 
@@ -186,6 +187,7 @@ func applyRules(name string, namespace string, kind string, origJson []byte, rul
 			return nil, false, fmt.Errorf("bad name regex: %w", err)
 		}
 		if !namere.MatchString(name) {
+			logger.Debugf("Object does not match name regex %q: %s/%s (kind: %s)", rule.NameRe, namespace, name, kind)
 			continue
 		}
 
@@ -194,6 +196,7 @@ func applyRules(name string, namespace string, kind string, origJson []byte, rul
 			return nil, false, fmt.Errorf("bad kind regex: %w", err)
 		}
 		if !kindre.MatchString(kind) {
+			logger.Debugf("Object does not match kind regex %q: %s/%s (kind: %s)", rule.KindRe, namespace, name, kind)
 			continue
 		}
 
@@ -207,6 +210,8 @@ func applyRules(name string, namespace string, kind string, origJson []byte, rul
 		if err != nil {
 			return nil, false, fmt.Errorf("failed to apply patch: %w", err)
 		}
+
+		logger.Debugf("Object matched: %s/%s (kind: %s) - will apply patch", namespace, name, kind)
 
 		// Log if the object was actually mutated
 		if !bytes.Equal(origJson, patchedJson) {
