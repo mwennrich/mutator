@@ -211,7 +211,7 @@ func applyRules(name string, namespace string, kind string, origJson []byte, rul
 			return nil, false, fmt.Errorf("failed to apply patch: %w", err)
 		}
 
-		logger.Debugf("Object matched: %s/%s (kind: %s) - applying", namespace, name, kind)
+		logger.Debugf("Object matched: %s/%s (kind: %s) - will apply patch", namespace, name, kind)
 
 		// Log if the object was actually mutated
 		if !bytes.Equal(origJson, patchedJson) {
