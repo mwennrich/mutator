@@ -3,3 +3,4 @@ deploy/webhook-registration.yaml
 deploy-kube-system
 mutator
 .vscode/
+deploy/rules.*
